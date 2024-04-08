@@ -1,0 +1,45 @@
+# This is a basic workflow to help you get started with Actions
+
+name: CI
+
+# Controls when the workflow will run
+on:
+  # Triggers the workflow on push or pull request events but only for the "main" branch
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    environment: Docker Image
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Build image and CI Scanning
+        run: |
+          # Build pull image
+          docker pull mysql:8
+
+          #Generate Console token
+          token=$(curl -s -k ${{ secrets.TEST_PCC_URL }}/api/v1/authenticate -X POST -H "Content-Type: application/json" -d '{
+            "username":"${{ secrets.TEST_PCC_USER }}",
+            "password":"${{ secrets.TEST_PCC_PASS }}"
+            }'  | grep -Po '"'"token"'"\s*:\s*"\K([^"]*)')
+          
+          #Download Twistcli
+          curl -s -O ${{ secrets.TEST_PCC_URL }}/api/v1/util/twistcli -H "Authorization: Bearer $token"
+          chmod a+x twistcli
+          ./twistcli --version
+
+          #Perform CI Scan
+          ./twistcli images scan --address ${{ secrets.TEST_PCC_URL }} --token $token --details mysql:8
+
+          #Perform Analysis Sandbox 
+          sudo ./twistcli sandbox --address ${{ secrets.TEST_PCC_URL }} --token $token --analysis-duration 2m mysql:8
